@@ -48,53 +48,50 @@ class OrderBook:
         best_bid = bids_df['price'].max()
         best_ask = asks_df['price'].min()
         bid_ask_spread = best_ask - best_bid
-        mid_price = (best_ask - best_bid) / 2 + best_bid
+        mid_price = (best_ask + best_bid) / 2
         relative_bid_ask_spread_over_time = 100 * bid_ask_spread / mid_price if mid_price != 0 else 0
+    
+        self.update_order_book_features(best_bid, self.current_best_bid, self.best_bid_over_time, transaction_time)
+        self.update_order_book_features(best_ask, self.current_best_ask, self.best_ask_over_time, transaction_time)
+        self.update_order_book_features(bid_ask_spread, self.current_bid_ask_spread, self.bid_ask_spread_over_time, transaction_time)
+        self.update_order_book_features(mid_price, self.current_mid_price, self.mid_price_over_time, transaction_time)
+        self.update_order_book_features(relative_bid_ask_spread_over_time, self.current_relative_bid_ask_spread, self.relative_bid_ask_spread_over_time, transaction_time)
         
-        if best_bid > self.current_best_bid:
-            self.current_best_bid = best_bid
-            self.best_bid_over_time[transaction_time] = best_bid
-        if best_ask < self.current_best_ask:
-            self.current_best_ask = best_ask
-            self.best_ask_over_time[transaction_time] = best_ask
-        if bid_ask_spread != self.current_bid_ask_spread:
-            self.current_bid_ask_spread = bid_ask_spread
-            self.bid_ask_spread_over_time[transaction_time] = bid_ask_spread
-        if mid_price != self.current_mid_price:
-            self.current_mid_price = mid_price
-            self.mid_price_over_time[transaction_time] = mid_price
-        if relative_bid_ask_spread_over_time != self.current_relative_bid_ask_spread:
-            self.current_relative_bid_ask_spread = relative_bid_ask_spread_over_time
-            self.relative_bid_ask_spread_over_time[transaction_time] = relative_bid_ask_spread_over_time
-        
-    def visualise_relative_bas_over_time(
+    def visualise_bas_over_time(
         self,
         hours_before_end_of_trading_session_to_visualise
     ):
-        
-        latest_time = max(datetime.fromisoformat(t) for t in self.relative_bid_ask_spread_over_time.keys())
-        three_hours_ago = latest_time - timedelta(hours=hours_before_end_of_trading_session_to_visualise)
-
+        latest_time = max(datetime.fromisoformat(t) for t in self.bid_ask_spread_over_time.keys())
+        start_time = latest_time - timedelta(hours=hours_before_end_of_trading_session_to_visualise)
         filtered = {
-            t: v for t, v in self.relative_bid_ask_spread_over_time.items()
-            if datetime.fromisoformat(t) >= three_hours_ago
+            t: v for t, v in self.bid_ask_spread_over_time.items()
+            if datetime.fromisoformat(t) >= start_time
         }
         if not filtered:
-            print("No data in the last three hours to plot.")
+            print("No data in the selected interval to plot.")
             return
-        times = list(filtered.keys())
-        spreads = list(filtered.values())
+
+        times = sorted(filtered.keys(), key=lambda t: datetime.fromisoformat(t))
+        spreads = [filtered[t] for t in times]
         times_dt = [datetime.fromisoformat(t) for t in times]
-        times_array = np.array(times_dt)
+
+        step_times = []
+        step_spreads = []
+        for i in range(len(times_dt)):
+            if i > 0:
+                step_times.append(times_dt[i])
+                step_spreads.append(spreads[i-1])
+            step_times.append(times_dt[i])
+            step_spreads.append(spreads[i])
 
         plt.figure(figsize=(12, 6))
         plt.gca().xaxis.set_major_locator(mdates.HourLocator())
         plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
 
-        plt.plot(times_array, spreads, label='Bid-Ask Spread')
+        plt.step(step_times, step_spreads, where='post', label='Bid-Ask Spread')
         plt.xlabel('Transaction Time')
         plt.ylabel('Bid-Ask Spread')
-        plt.title('Bid-Ask Spread Over Time')
+        plt.title('Bid-Ask Spread Over Time (Step Plot)')
         plt.legend()
         plt.xticks(rotation=45)
         plt.tight_layout()
@@ -151,7 +148,18 @@ class OrderBook:
             self.hibernated_orders[order_side][order.initial_id] = order
         except KeyError:
             raise KeyError(f"Order with initial_id {order.initial_id} does not exist in {order_side} orders.")
-    
+        
+    def update_order_book_features(
+        self,
+        new_value: float,
+        value_to_update: float,
+        values_over_time_to_update: dict,
+        transaction_time: str
+    ):
+        if new_value != value_to_update:
+            value_to_update = new_value
+            values_over_time_to_update[transaction_time] = new_value
+            
     action_code_to_action = {
         'A': add_order,
         'C': change_existing_order,

@@ -50,6 +50,7 @@ def calculate_implicit_trade_cost_by_product_by_day(
             orient='index',
             columns=['implicit_trade_cost']
         )
+        print(f"Implicit trade costs calculated for delivery start time: {delivery_start_time}")
     
     return implicit_trade_costs
     
@@ -70,7 +71,12 @@ def visualise_trade_costs_by_product_by_day(
         tick_times = pd.date_range(start=df_filtered.index.min(), end=df_filtered.index.max(), freq=interval)
         
         plt.figure(figsize=(10, 5))
-        plt.scatter(df_filtered.index, df_filtered['implicit_trade_cost'])
+        plt.step(
+            df_filtered.index,
+            df_filtered['implicit_trade_cost'],
+            where='post',
+            marker='o'
+        )
         plt.title(f"Implicit Trade Costs - Delivery Start: {delivery_start_time}")
         plt.xticks(tick_times)
         plt.xlabel("Execution Time")

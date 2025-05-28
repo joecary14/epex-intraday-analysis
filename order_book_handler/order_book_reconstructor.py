@@ -4,7 +4,7 @@ import order_book_handler.order as o
 from time import time
 from typing import Dict
 
-hours_before_end_of_session_to_visualise = 2
+hours_before_end_of_session_to_visualise = 5
 
 def reconstruct_order_book_one_product_one_day(
     orders_csv_filepath : str,
@@ -43,17 +43,20 @@ def reconstruct_order_book_one_product_one_day(
             recalculate_order_book_features = False
             for side, prices_affected in prices_affected_by_side.items():
                 if side == 'BUY' and len(prices_affected) > 0:
-                    if order_book.current_best_bid < max(prices_affected):
+                    if order_book.current_best_bid <= max(prices_affected):
                         recalculate_order_book_features = True
                         break
                 elif side == 'SELL' and len(prices_affected) > 0:
-                    if order_book.current_best_ask > min(prices_affected):
+                    if order_book.current_best_ask >= min(prices_affected):
                         recalculate_order_book_features = True
-                        break
+                        break            
             if recalculate_order_book_features:
                 order_book.calculate_order_book_features(str(transaction_time))
         
         order_book_by_delivery_start_time[delivery_start_time] = order_book
+        # order_book.visualise_bas_over_time(
+        #     hours_before_end_of_session_to_visualise
+        # )
         end_time = time()
         print("time taken for order book reconstruction for delivery start time", delivery_start_time, ":", end_time - start_time, "seconds")
     
