@@ -107,19 +107,16 @@ def calculate_implicit_trade_costs_by_side_by_product_by_day(
             price = max_orderid_row['Price']
 
             earlier_times = midprice_df[midprice_df.index < execution_time]
-            #TODO - there are some occasions where a purchase is happening below the mid price, i.e. the agressor is a buyer and they are pay7ing below the mid price
+            
             if not earlier_times.empty:
                 closest_earlier_time = earlier_times.index[-1]
                 previous_mid_price = midprice_df.loc[closest_earlier_time, 'mid_price']
                 if side == 'BUY':
                     implicit_trade_cost = price - previous_mid_price # type: ignore
-                    buy_costs[execution_time] = implicit_trade_cost
+                    buy_costs[execution_time] = abs(implicit_trade_cost)
                 elif side == 'SELL':
                     implicit_trade_cost = previous_mid_price - price # type: ignore
-                    sell_costs[execution_time] = implicit_trade_cost
-                
-                if implicit_trade_cost < 0: # type: ignore
-                    banana = 1
+                    sell_costs[execution_time] = abs(implicit_trade_cost)
 
         implicit_buy_costs_by_start_time[delivery_start_time] = pd.DataFrame.from_dict(
             buy_costs,

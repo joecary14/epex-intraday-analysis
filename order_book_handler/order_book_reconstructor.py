@@ -19,18 +19,12 @@ def reconstruct_order_book_one_product_one_day(
     order_book_by_delivery_start_time = {}
     orders_by_settlement_period = orders.groupby('DeliveryStart')
     for delivery_start_time, orders_one_settlement_period in orders_by_settlement_period:
-        #Test Code:
-        if delivery_start_time != '2024-01-26T13:30:00Z':
-            continue
-        #End Test Code
         start_time = time()
         order_book = ob.OrderBook()
         orders_by_settlement_period_by_transaction_time = orders_one_settlement_period.groupby('TransactionTime')
         for transaction_time, orders_by_transaction_time in orders_by_settlement_period_by_transaction_time:
             orders_by_initial_id = orders_by_transaction_time.groupby('InitialId')
             prices_affected_by_side = {}
-            if transaction_time == '2024-01-25T22:38:44.548Z':
-                banana = 1
             for initial_id, orders_for_id in orders_by_initial_id:
                 order_book_side = orders_for_id.iloc[0]['Side']
                 prices_affected = []
