@@ -8,16 +8,16 @@ output_filepath = '/Users/josephcary/Library/CloudStorage/OneDrive-Nexus365/Firs
 hours_before_end_of_session_to_visualise = 3
 
 def main():
-    implicit_trade_costs, trade_volumes = tcr.calculate_implicit_trade_cost_by_product_by_day(
+    buy_costs, sell_costs = tcr.calculate_implicit_trade_costs_by_side_by_product_by_day(
         trades_csv_filepath,
         orders_csv_filepath,
         product_name
     )
-    tcr.visualise_trade_costs_by_product_by_day(
-        implicit_trade_costs,
-        trade_volumes,
+    tcr.visualise_buy_sell_trade_costs(
+        buy_costs,
+        sell_costs,
         hours_before_end_of_session_to_visualise,
-        output_filepath
+        output_filepath,
     )
 
 main()

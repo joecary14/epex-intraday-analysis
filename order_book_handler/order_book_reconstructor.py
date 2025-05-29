@@ -38,7 +38,10 @@ def reconstruct_order_book_one_product_one_day(
                     action_method = order_book.action_code_to_action[action_code]
                     action_method(order_book, order, order_book_side)
                     prices_affected.append(order_row['Price'])
-                prices_affected_by_side[order_book_side] = prices_affected
+                if prices_affected_by_side[order_book_side] is not None:
+                    prices_affected_by_side[order_book_side].extend(prices_affected)
+                else:
+                    prices_affected_by_side[order_book_side] = prices_affected
             
             recalculate_order_book_features = False
             for side, prices_affected in prices_affected_by_side.items():

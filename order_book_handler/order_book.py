@@ -51,11 +51,14 @@ class OrderBook:
         mid_price = (best_ask + best_bid) / 2
         relative_bid_ask_spread_over_time = 100 * bid_ask_spread / mid_price if mid_price != 0 else 0
     
-        self.update_order_book_features(best_bid, self.current_best_bid, self.best_bid_over_time, transaction_time)
-        self.update_order_book_features(best_ask, self.current_best_ask, self.best_ask_over_time, transaction_time)
-        self.update_order_book_features(bid_ask_spread, self.current_bid_ask_spread, self.bid_ask_spread_over_time, transaction_time)
-        self.update_order_book_features(mid_price, self.current_mid_price, self.mid_price_over_time, transaction_time)
-        self.update_order_book_features(relative_bid_ask_spread_over_time, self.current_relative_bid_ask_spread, self.relative_bid_ask_spread_over_time, transaction_time)
+        self.current_best_bid = self.update_order_book_features(best_bid, self.current_best_bid, self.best_bid_over_time, transaction_time)
+        self.current_best_ask = self.update_order_book_features(best_ask, self.current_best_ask, self.best_ask_over_time, transaction_time)
+        self.current_bid_ask_spread = self.update_order_book_features(bid_ask_spread, self.current_bid_ask_spread, self.bid_ask_spread_over_time, transaction_time)
+        self.current_mid_price = self.update_order_book_features(mid_price, self.current_mid_price, self.mid_price_over_time, transaction_time)
+        self.current_relative_bid_ask_spread = self.update_order_book_features(relative_bid_ask_spread_over_time, self.current_relative_bid_ask_spread, self.relative_bid_ask_spread_over_time, transaction_time)
+        
+        if self.current_best_bid >= self.current_best_ask:
+            banana = 1  # This is a placeholder for debugging purposes, can be removed later.
         
     def visualise_bas_over_time(
         self,
@@ -155,10 +158,12 @@ class OrderBook:
         value_to_update: float,
         values_over_time_to_update: dict,
         transaction_time: str
-    ):
+    ) -> float:
         if new_value != value_to_update:
-            value_to_update = new_value
             values_over_time_to_update[transaction_time] = new_value
+            return new_value
+
+        return value_to_update
             
     action_code_to_action = {
         'A': add_order,
