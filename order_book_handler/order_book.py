@@ -45,20 +45,11 @@ class OrderBook:
         if no_bids or no_asks:
             return
         
-        best_bid = bids_df['price'].max()
-        best_ask = asks_df['price'].min()
-        bid_ask_spread = best_ask - best_bid
-        mid_price = (best_ask + best_bid) / 2
-        relative_bid_ask_spread_over_time = 100 * bid_ask_spread / mid_price if mid_price != 0 else 0
-    
-        self.current_best_bid = self.update_order_book_features(best_bid, self.current_best_bid, self.best_bid_over_time, transaction_time)
-        self.current_best_ask = self.update_order_book_features(best_ask, self.current_best_ask, self.best_ask_over_time, transaction_time)
-        self.current_bid_ask_spread = self.update_order_book_features(bid_ask_spread, self.current_bid_ask_spread, self.bid_ask_spread_over_time, transaction_time)
-        self.current_mid_price = self.update_order_book_features(mid_price, self.current_mid_price, self.mid_price_over_time, transaction_time)
-        self.current_relative_bid_ask_spread = self.update_order_book_features(relative_bid_ask_spread_over_time, self.current_relative_bid_ask_spread, self.relative_bid_ask_spread_over_time, transaction_time)
-        
-        if self.current_best_bid >= self.current_best_ask:
-            banana = 1  # This is a placeholder for debugging purposes, can be removed later.
+        self.recalculate_order_book_features(
+            bids_df,
+            asks_df,
+            transaction_time
+        )
         
     def visualise_bas_over_time(
         self,
@@ -151,8 +142,50 @@ class OrderBook:
             self.hibernated_orders[order_side][order.initial_id] = order
         except KeyError:
             raise KeyError(f"Order with initial_id {order.initial_id} does not exist in {order_side} orders.")
+      
+    def recalculate_order_book_features(
+        self,
+        bids_df: pd.DataFrame,
+        asks_df: pd.DataFrame,
+        transaction_time: str
+    ):  
+        best_bid = bids_df['price'].max()
+        best_ask = asks_df['price'].min()
         
-    def update_order_book_features(
+        if best_bid >= best_ask:
+            n = 2
+            if best_bid != self.current_best_bid:
+                while best_bid >= best_ask:
+                    n += 1
+                    best_bid = bids_df['price'].nlargest(n).iloc[1]
+            else:
+                while best_ask <= best_bid:
+                    n += 1
+                    best_ask = asks_df['price'].nsmallest(n).iloc[1]
+        
+        self.update_all_order_book_features(
+            best_bid,
+            best_ask,
+            transaction_time
+        )
+    
+    def update_all_order_book_features(
+        self,
+        best_bid: float,
+        best_ask: float,
+        transaction_time: str
+    ):
+        bid_ask_spread = best_ask - best_bid
+        mid_price = (best_ask + best_bid) / 2
+        relative_bid_ask_spread_over_time = 100 * bid_ask_spread / mid_price if mid_price != 0 else 0
+        
+        self.current_best_bid = self.update_order_book_feature(best_bid, self.current_best_bid, self.best_bid_over_time, transaction_time)
+        self.current_best_ask = self.update_order_book_feature(best_ask, self.current_best_ask, self.best_ask_over_time, transaction_time)
+        self.current_bid_ask_spread = self.update_order_book_feature(bid_ask_spread, self.current_bid_ask_spread, self.bid_ask_spread_over_time, transaction_time)
+        self.current_mid_price = self.update_order_book_feature(mid_price, self.current_mid_price, self.mid_price_over_time, transaction_time)
+        self.current_relative_bid_ask_spread = self.update_order_book_feature(relative_bid_ask_spread_over_time, self.current_relative_bid_ask_spread, self.relative_bid_ask_spread_over_time, transaction_time)
+    
+    def update_order_book_feature(
         self,
         new_value: float,
         value_to_update: float,
