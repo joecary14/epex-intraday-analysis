@@ -1,8 +1,9 @@
+import os
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import order_book_handler.order_book_reconstructor as ob_reconstruction
 from typing import Dict
-import os
 
 def calculate_implicit_trade_cost_by_product_by_day(
     trades_csv_filepath: str,
@@ -12,10 +13,16 @@ def calculate_implicit_trade_cost_by_product_by_day(
     trades_one_day = pd.read_csv(
         trades_csv_filepath,
         header=1,
-        usecols=['Product', 'Side', 'DeliveryStart', 'ExecutionTime', 'Price', 'Volume']
+        usecols=['Product', 'Side', 'DeliveryStart', 'ExecutionTime', 'Price', 'Volume'],
+        dtype={
+            'Price': float,
+            'Volume': float
+        },
+        parse_dates=['ExecutionTime', 'DeliveryStart']
     )
     
     trades_one_day_one_product = trades_one_day[trades_one_day['Product'] == product_name]
+    unique_trades_one_day_one_product = trades_one_day_one_product[trades_one_day_one_product['Side'] == 'BUY']  # Arbitrarily filter to get only the unique trades (since both buy and sell feature in the trade book)
     
     order_book_by_delivery_start_time = ob_reconstruction.reconstruct_order_book_one_product_one_day(
         orders_csv_filepath,
@@ -31,40 +38,40 @@ def calculate_implicit_trade_cost_by_product_by_day(
         for delivery_start_time, order_book in order_book_by_delivery_start_time.items()
     }
     
-    implicit_trade_costs = {}
-    trade_volumes = {}
+    implicit_trade_costs_and_volumes = {}
     
     for delivery_start_time, midprice_df in midprice_df_by_delivery_start_time.items():
-        trades_for_delivery_start_time = trades_one_day_one_product[trades_one_day_one_product['DeliveryStart'] == delivery_start_time]
-        unique_trades_for_delivery_start_time = trades_for_delivery_start_time[trades_for_delivery_start_time['Side']=='BUY'] #Arbitrarily filter to get only the unique trades (since both buy and sell feature in the trade book)
+        trades_for_delivery_start_time = unique_trades_one_day_one_product[unique_trades_one_day_one_product['DeliveryStart'] == delivery_start_time]
         trade_costs = {}
-        volumes = {}
+        execution_times = trades_for_delivery_start_time['ExecutionTime'].sort_values()
+        midprice_times = midprice_df.index.sort_values()
         
-        for index, trade_row in unique_trades_for_delivery_start_time.iterrows():
+        closest_index = np.searchsorted(midprice_times, execution_times, side='right') - 1
+        closest_times = midprice_times[closest_index]
+        previous_mid_prices = pd.Series(midprice_df.loc[closest_times, 'mid_price']).values
+        prices = trades_for_delivery_start_time['Price'].to_numpy()
+        volumes = trades_for_delivery_start_time['Volume'].values
+        implicit_trade_costs = np.abs(prices - previous_mid_prices)
+        #TODO - may be ablke to delete this, once happy with the vectorised operations
+        for index, trade_row in trades_for_delivery_start_time.iterrows():
             execution_time = trade_row['ExecutionTime']
             earlier_times = midprice_df[midprice_df.index < execution_time]
             closest_earlier_time = earlier_times.index[-1]
             previous_mid_price = midprice_df.loc[closest_earlier_time, 'mid_price']
             implicit_trade_cost = abs(trade_row['Price'] - previous_mid_price)
-            trade_costs[execution_time] = implicit_trade_cost
-            volumes[execution_time] = trade_row['Volume']
-        
-        implicit_trade_costs[delivery_start_time] = pd.DataFrame.from_dict(
+            trade_costs[execution_time] = (implicit_trade_cost, trade_row['Volume'])
+        #Delete up to here, and then change the conversion to a dataframe
+        implicit_trade_costs_and_volumes[delivery_start_time] = pd.DataFrame.from_dict(
             trade_costs,
             orient='index',
-            columns=['implicit_trade_cost']
-        )
-        trade_volumes[delivery_start_time] = pd.DataFrame.from_dict(
-            volumes,
-            orient='index',
-            columns=['trade_volume']
+            columns=['implicit_trade_cost', 'trade_volume']
         )
         print(f"Implicit trade costs calculated for delivery start time: {delivery_start_time}")
     
-    return implicit_trade_costs, trade_volumes
+    return implicit_trade_costs_and_volumes
 
 #This calculates the trade costs for the aggressor, based on the later order ID in a transaction pair
-def calculate_implicit_trade_costs_by_side_by_product_by_day(
+def calculate_relative_implicit_trade_costs_by_side_by_product_by_day(
     trades_csv_filepath: str,
     orders_csv_filepath: str,
     product_name: str
@@ -98,13 +105,13 @@ def calculate_implicit_trade_costs_by_side_by_product_by_day(
         trades_for_delivery_start_time = trades_one_day_one_product[trades_one_day_one_product['DeliveryStart'] == delivery_start_time]
         buy_costs = {}
         sell_costs = {}
-        
+        #TODO - the same goes for here as the function above
         for trade_id, trades in trades_for_delivery_start_time.groupby('TradeId'):
             max_orderid_row = trades.loc[trades['OrderID'].idxmax()]
-
             execution_time = max_orderid_row['ExecutionTime']
             side = str(max_orderid_row['Side'])
             price = max_orderid_row['Price']
+            volume = max_orderid_row['Volume']
 
             earlier_times = midprice_df[midprice_df.index < execution_time]
             
@@ -113,118 +120,21 @@ def calculate_implicit_trade_costs_by_side_by_product_by_day(
                 previous_mid_price = midprice_df.loc[closest_earlier_time, 'mid_price']
                 if side == 'BUY':
                     implicit_trade_cost = price - previous_mid_price # type: ignore
-                    buy_costs[execution_time] = abs(implicit_trade_cost)
+                    buy_costs[execution_time] = (abs(implicit_trade_cost), volume, price)
                 elif side == 'SELL':
                     implicit_trade_cost = previous_mid_price - price # type: ignore
-                    sell_costs[execution_time] = abs(implicit_trade_cost)
+                    sell_costs[execution_time] = (abs(implicit_trade_cost), volume, price)
 
         implicit_buy_costs_by_start_time[delivery_start_time] = pd.DataFrame.from_dict(
             buy_costs,
             orient='index',
-            columns=['implicit_trade_cost']
+            columns=['implicit_trade_cost', 'trade_volume', 'trade_price']
         )
         implicit_sell_costs_by_start_time[delivery_start_time] = pd.DataFrame.from_dict(
             sell_costs,
             orient='index',
-            columns=['implicit_trade_cost']
+            columns=['implicit_trade_cost', 'trade_volume', 'trade_price']
         )
         print(f"Implicit trade costs by side calculated for delivery start time: {delivery_start_time}")
 
     return implicit_buy_costs_by_start_time, implicit_sell_costs_by_start_time
-    
-def visualise_buy_sell_trade_costs(
-    implicit_buy_costs: Dict[str, pd.DataFrame],
-    implicit_sell_costs: Dict[str, pd.DataFrame],
-    hours_before_end_of_session_to_visualise: int,
-    output_filepath: str
-):
-    for delivery_start_time, buy_costs_df in implicit_buy_costs.items():
-        buy_costs_df = buy_costs_df.copy()
-        sell_costs_df = implicit_sell_costs[delivery_start_time].copy()
-        buy_costs_df.index = pd.to_datetime(buy_costs_df.index)
-        sell_costs_df.index = pd.to_datetime(sell_costs_df.index)
-        max_time = buy_costs_df.index.max()
-        min_time = max_time - pd.Timedelta(hours=hours_before_end_of_session_to_visualise)
-        buy_costs_filtered = buy_costs_df[buy_costs_df.index >= min_time]
-        sell_costs_filtered = sell_costs_df[sell_costs_df.index >= min_time]
-        
-        plt.figure(figsize=(10, 5))
-        if not buy_costs_filtered.empty or not sell_costs_filtered.empty:
-            if not buy_costs_filtered.empty:
-                plt.step(
-                    buy_costs_filtered.index,
-                    buy_costs_filtered['implicit_trade_cost'],
-                    where='post',
-                    label='Buy Implicit Trade Cost',
-                    color='green'
-                )
-            if not sell_costs_filtered.empty:
-                plt.step(
-                    sell_costs_filtered.index,
-                    sell_costs_filtered['implicit_trade_cost'],
-                    where='post',
-                    label='Sell Implicit Trade Cost',
-                    color='red'
-                )
-            plt.title(f"Buy/Sell Implicit Trade Costs - Delivery Start: {delivery_start_time}")
-            plt.xlabel("Execution Time")
-            plt.ylabel("Implicit Trade Cost")
-            plt.legend()
-            plt.xticks(rotation=45)
-            plt.tight_layout()
-            plt.show()
-    # base, ext = os.path.splitext(output_filepath)
-    # for i, fig_num in enumerate(plt.get_fignums(), 1):
-    #     plt.figure(fig_num)
-    #     plt.savefig(f"{base}_{i}.png")
-    #     plt.close()
-
-def visualise_trade_costs_by_product_by_day(
-    implicit_trade_costs: Dict[str, pd.DataFrame],
-    trade_volumes: Dict[str, pd.DataFrame],
-    hours_before_end_of_session_to_visualise: int,
-    output_filepath: str
-):
-    for delivery_start_time, trade_costs_df in implicit_trade_costs.items():
-        trade_costs_df = trade_costs_df.copy()
-        volumes_df = trade_volumes[delivery_start_time].copy()
-        trade_costs_df.index = pd.to_datetime(trade_costs_df.index)
-        volumes_df.index = pd.to_datetime(volumes_df.index)
-        max_time = trade_costs_df.index.max()
-        min_time = max_time - pd.Timedelta(hours=hours_before_end_of_session_to_visualise)
-        trade_costs_filtered = trade_costs_df[trade_costs_df.index >= min_time]
-        volumes_filtered = volumes_df[volumes_df.index >= min_time]
-        interval = pd.Timedelta(minutes=15)
-        tick_times = pd.date_range(start=trade_costs_filtered.index.min(), end=trade_costs_filtered.index.max(), freq=interval)
-        merged = trade_costs_filtered.join(volumes_filtered, how='inner')
-        resampled_vwap = merged.resample('5min').apply(
-            lambda x: (x['implicit_trade_cost'] * x['trade_volume']).sum() / x['trade_volume'].sum()
-            if x['trade_volume'].sum() > 0 else float('nan')
-        )
-        resampled_volume = merged['trade_volume'].resample('5min').sum()
-
-        fig, ax1 = plt.subplots(figsize=(10, 5))
-        if not merged.empty:
-            merged = merged.sort_index()
-            ax1.plot(resampled_vwap.index, resampled_vwap.values, label='VWAP (5min)', color='orange', marker='x')
-            ax1.set_ylabel('VWAP (5min)', color='orange')
-            ax1.tick_params(axis='y', labelcolor='orange')
-
-            ax2 = ax1.twinx()
-            ax2.bar(resampled_volume.index, resampled_volume.values, width=0.003, alpha=0.3, color='blue', label='Volume')
-            ax2.set_ylabel('Volume', color='blue')
-            ax2.tick_params(axis='y', labelcolor='blue')
-
-            plt.title(f"Implicit Trade Costs & Volume - Delivery Start: {delivery_start_time}")
-            plt.xticks(tick_times)
-            plt.xlabel("Execution Time")
-            plt.xticks(rotation=45)
-            plt.tight_layout()
-            plt.show()
-
-    # base, ext = os.path.splitext(output_filepath)
-    # for i, fig_num in enumerate(plt.get_fignums(), 1):
-    #     plt.figure(fig_num)
-    #     plt.savefig(f"{base}_{i}.png")
-    #     plt.close()
-    
