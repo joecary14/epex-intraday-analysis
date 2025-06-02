@@ -57,9 +57,6 @@ def reconstruct_order_book_one_product_one_day(
                 order_book.calculate_order_book_features(str(transaction_time))
         
         order_book_by_delivery_start_time[delivery_start_time] = order_book
-        # order_book.visualise_bas_over_time(
-        #     hours_before_end_of_session_to_visualise
-        # )
         end_time = time()
         print("time taken for order book reconstruction for delivery start time", delivery_start_time, ":", end_time - start_time, "seconds")
     

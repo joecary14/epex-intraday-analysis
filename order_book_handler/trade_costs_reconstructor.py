@@ -71,7 +71,7 @@ def calculate_implicit_trade_cost_by_product_by_day(
     return implicit_trade_costs_and_volumes
 
 #This calculates the trade costs for the aggressor, based on the later order ID in a transaction pair
-def calculate_relative_implicit_trade_costs_by_side_by_product_by_day(
+def calculate_implicit_trade_costs_by_side_by_product_by_day(
     trades_csv_filepath: str,
     orders_csv_filepath: str,
     product_name: str

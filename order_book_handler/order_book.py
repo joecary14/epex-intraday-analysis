@@ -1,7 +1,5 @@
 import pandas as pd
 import numpy as np
-from datetime import datetime
-from datetime import timedelta
 import order_book_handler.order as order
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -50,46 +48,6 @@ class OrderBook:
             asks_df,
             transaction_time
         )
-        
-    def visualise_bas_over_time(
-        self,
-        hours_before_end_of_trading_session_to_visualise
-    ):
-        latest_time = max(datetime.fromisoformat(t) for t in self.bid_ask_spread_over_time.keys())
-        start_time = latest_time - timedelta(hours=hours_before_end_of_trading_session_to_visualise)
-        filtered = {
-            t: v for t, v in self.bid_ask_spread_over_time.items()
-            if datetime.fromisoformat(t) >= start_time
-        }
-        if not filtered:
-            print("No data in the selected interval to plot.")
-            return
-
-        times = sorted(filtered.keys(), key=lambda t: datetime.fromisoformat(t))
-        spreads = [filtered[t] for t in times]
-        times_dt = [datetime.fromisoformat(t) for t in times]
-
-        step_times = []
-        step_spreads = []
-        for i in range(len(times_dt)):
-            if i > 0:
-                step_times.append(times_dt[i])
-                step_spreads.append(spreads[i-1])
-            step_times.append(times_dt[i])
-            step_spreads.append(spreads[i])
-
-        plt.figure(figsize=(12, 6))
-        plt.gca().xaxis.set_major_locator(mdates.HourLocator())
-        plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-
-        plt.step(step_times, step_spreads, where='post', label='Bid-Ask Spread')
-        plt.xlabel('Transaction Time')
-        plt.ylabel('Bid-Ask Spread')
-        plt.title('Bid-Ask Spread Over Time (Step Plot)')
-        plt.legend()
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        plt.show()
     
     def add_order(
         self,

@@ -1,8 +1,98 @@
 import os
+import order_book_handler.order_book as ob
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from datetime import datetime, timedelta
 from typing import Dict
 
+def visualise_bas_5min_avg_by_product(
+    order_books: Dict[str, ob.OrderBook],
+    hours_before_end_of_trading_session_to_visualise: int,
+    output_filepath: str
+    ):
+    os.makedirs(output_filepath, exist_ok=True)
+    for delivery_start_time, order_book in order_books.items():
+        latest_time = max(datetime.fromisoformat(t) for t in order_book.bid_ask_spread_over_time.keys())
+        start_time = latest_time - timedelta(hours=hours_before_end_of_trading_session_to_visualise)
+        filtered = {
+            t: v for t, v in order_book.bid_ask_spread_over_time.items()
+            if datetime.fromisoformat(t) >= start_time
+        }
+        if not filtered:
+            print("No data in the selected interval to plot.")
+            continue
+
+        df = pd.DataFrame(
+            list(filtered.items()), columns=['time', 'bas']
+        )
+        df['time'] = pd.to_datetime(df['time'])
+        df = df.set_index('time').sort_index()
+        bas_5min_avg = df['bas'].resample('5min').mean()
+
+        plt.figure(figsize=(12, 6))
+        plt.gca().xaxis.set_major_locator(mdates.HourLocator())
+        plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+
+        plt.plot(bas_5min_avg.index, bas_5min_avg.to_numpy(), label='Bid-Ask Spread (5min Avg)', marker='o')
+        plt.xlabel('Transaction Time')
+        plt.ylabel('Bid-Ask Spread (5min Avg)')
+        plt.title('Bid-Ask Spread 5-Minute Average Over Time')
+        plt.legend()
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        safe_filename = str(delivery_start_time).replace(':', '_').replace(' ', '_')
+        figure_path = os.path.join(output_filepath, f"trade_costs_5minavg_{safe_filename}.png")
+        plt.savefig(figure_path, dpi=300, bbox_inches='tight')
+        print(f"Saved figure: {figure_path}")
+        plt.close()
+
+def visualise_bas_over_time_by_product(
+        order_books: Dict[str,ob.OrderBook],
+        hours_before_end_of_trading_session_to_visualise : int,
+        output_filepath: str
+    ):
+    os.makedirs(output_filepath, exist_ok=True)
+    for delivery_start_time, order_book in order_books.items():
+        latest_time = max(datetime.fromisoformat(t) for t in order_book.bid_ask_spread_over_time.keys())
+        start_time = latest_time - timedelta(hours=hours_before_end_of_trading_session_to_visualise)
+        filtered = {
+            t: v for t, v in order_book.bid_ask_spread_over_time.items()
+            if datetime.fromisoformat(t) >= start_time
+        }
+        if not filtered:
+            print("No data in the selected interval to plot.")
+            return
+
+        times = sorted(filtered.keys(), key=lambda t: datetime.fromisoformat(t))
+        spreads = [filtered[t] for t in times]
+        times_dt = [datetime.fromisoformat(t) for t in times]
+
+        step_times = []
+        step_spreads = []
+        for i in range(len(times_dt)):
+            if i > 0:
+                step_times.append(times_dt[i])
+                step_spreads.append(spreads[i-1])
+            step_times.append(times_dt[i])
+            step_spreads.append(spreads[i])
+
+        plt.figure(figsize=(12, 6))
+        plt.gca().xaxis.set_major_locator(mdates.HourLocator())
+        plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+
+        plt.step(step_times, step_spreads, where='post', label='Bid-Ask Spread')
+        plt.xlabel('Transaction Time')
+        plt.ylabel('Bid-Ask Spread')
+        plt.title('Bid-Ask Spread Over Time (Step Plot)')
+        plt.legend()
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        safe_filename = str(delivery_start_time).replace(':', '_').replace(' ', '_')
+        figure_path = os.path.join(output_filepath, f"trade_costs_{safe_filename}.png")
+        plt.savefig(figure_path, dpi=300, bbox_inches='tight')
+        print(f"Saved figure: {figure_path}")
+        plt.close()
 
 def visualise_buy_sell_trade_costs(
     implicit_buy_costs: Dict[str, pd.DataFrame],
@@ -10,9 +100,13 @@ def visualise_buy_sell_trade_costs(
     hours_before_end_of_session_to_visualise: int,
     output_filepath: str
 ):
+    os.makedirs(output_filepath, exist_ok=True)
     for delivery_start_time, buy_costs_df in implicit_buy_costs.items():
         buy_costs_df = buy_costs_df.copy()
         sell_costs_df = implicit_sell_costs[delivery_start_time].copy()
+        if buy_costs_df.empty or sell_costs_df.empty:
+            print(f"No data for delivery start time: {delivery_start_time}")
+            continue
         buy_costs_df.index = pd.to_datetime(buy_costs_df.index)
         sell_costs_df.index = pd.to_datetime(sell_costs_df.index)
         max_time = buy_costs_df.index.max()
@@ -74,12 +168,11 @@ def visualise_buy_sell_trade_costs(
             plt.legend()
             plt.xticks(rotation=45)
             plt.tight_layout()
-            plt.show()
-    base, ext = os.path.splitext(output_filepath)
-    for i, fig_num in enumerate(plt.get_fignums(), 1):
-        plt.figure(fig_num)
-        plt.savefig(f"{base}_{i}.png")
-        plt.close()
+            safe_filename = str(delivery_start_time).replace(':', '_').replace(' ', '_')
+            figure_path = os.path.join(output_filepath, f"trade_costs_{safe_filename}.png")
+            plt.savefig(figure_path, dpi=300, bbox_inches='tight')
+            print(f"Saved figure: {figure_path}")
+            plt.close()
 
 def visualise_trade_costs_by_product_by_day(
     implicit_trade_costs: Dict[str, pd.DataFrame],

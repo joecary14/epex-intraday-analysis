@@ -5,20 +5,18 @@ import order_book_handler.data_visualisation as dv
 orders_csv_filepath = '/Users/josephcary/Library/CloudStorage/OneDrive-Nexus365/First Year/Data/EPEX/Continuous_Orders-GB-20240126-20240127T044441000Z.csv'
 trades_csv_filepath = '/Users/josephcary/Library/CloudStorage/OneDrive-Nexus365/First Year/Data/EPEX/Continuous_Trades-GB-20240126-20240127T002144000Z.csv'
 product_name = 'GB_Half_Hour_Power'
-output_filepath = '/Users/josephcary/Library/CloudStorage/OneDrive-Nexus365/First Year/Papers/Intraday Trading/Analysis/'
-hours_before_end_of_session_to_visualise = 10
+output_filepath = '/Users/josephcary/Library/CloudStorage/OneDrive-Nexus365/First Year/Papers/Intraday Trading/Analysis/HH 4 Hr 5 Min Avg BAS/'
+hours_before_end_of_session_to_visualise = 4
 
 def main():
-    buy_costs, sell_costs = tcr.calculate_relative_implicit_trade_costs_by_side_by_product_by_day(
-        trades_csv_filepath,
+    order_books = obr.reconstruct_order_book_one_product_one_day(
         orders_csv_filepath,
         product_name
     )
-    dv.visualise_buy_sell_trade_costs(
-        buy_costs,
-        sell_costs,
+    dv.visualise_bas_5min_avg_by_product(
+        order_books,
         hours_before_end_of_session_to_visualise,
-        output_filepath,
+        output_filepath
     )
 
 main()
